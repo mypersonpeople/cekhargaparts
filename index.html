@@ -94,7 +94,6 @@ async function fetchPartData(kd_part) {
     const cleanCode = kd_part.toUpperCase().trim();
     const targetUrl = `https://h3.indako.id/site/cekhargapartindex?TblmstpartSearch%5Bvidpart%5D=${encodeURIComponent(cleanCode)}&TblmstpartSearch%5Bvpartdesc%5D=&TblmstpartSearch%5Bmhetpart%5D=&TblmstpartSearch%5Bvstatus%5D=`;
     
-    // Menggunakan corsproxy.io
     const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
     const response = await fetch(proxyUrl);
@@ -150,26 +149,27 @@ async function startBulkSearch() {
                 tempTable.innerHTML = rawHtml;
                 const cols = tempTable.querySelectorAll('td');
 
-                if (cols.length >= 5) { // Memastikan kolom status (kolom ke-5) tersedia
+                if (cols.length >= 5) {
                     const hargaTeks = cols[3].innerText.trim();
                     const hargaDasar = parseFloat(hargaTeks.replace(/\./g, '').replace(',', '.'));
                     const hargaJual = hargaDasar * (1 + (marginPercent / 100));
 
-                    // PERBAIKAN UTAMA: Mengecek status langsung dari isi teks/HTML kolom ke-5 (index 4)
+                    // AMBIL KONTEN KOLOM KE-5 (INDEX 4) SECARA KHUSUS
                     const statusColumnHtml = cols[4].innerHTML;
                     const statusColumnText = cols[4].innerText.trim().toUpperCase();
                     
                     let statusHtml = "";
-                    if (statusColumnHtml.includes('fa-check') || statusColumnHtml.includes('color:green') || statusColumnText.includes('AKTIF')) {
-                        // Jika kolom ke-5 punya ikon centang atau teks aktif, namun pastikan bukan "TIDAK AKTIF"
-                        if (statusColumnText.includes('TIDAK')) {
-                            statusHtml = '<span class="status-tidak">Tidak Aktif</span>';
-                        } else {
-                            statusHtml = '<span class="status-aktif">Aktif</span>';
-                        }
-                    } else if (statusColumnHtml.includes('fa-times') || statusColumnHtml.includes('color:red') || statusColumnText.includes('TIDAK')) {
+                    
+                    // LOGIKA BARU: Cek tanda silang merah (remove/text-danger) atau kata "TIDAK" terlebih dahulu
+                    if (statusColumnHtml.includes('glyphicon-remove') || statusColumnHtml.includes('text-danger') || statusColumnText.includes('TIDAK')) {
                         statusHtml = '<span class="status-tidak">Tidak Aktif</span>';
-                    } else {
+                    } 
+                    // Cek tanda centang hijau (ok/text-success) atau kata "AKTIF" murni
+                    else if (statusColumnHtml.includes('glyphicon-ok') || statusColumnHtml.includes('text-success') || statusColumnText === 'AKTIF') {
+                        statusHtml = '<span class="status-aktif">Aktif</span>';
+                    } 
+                    // Fallback jika kosong atau tidak terdefinisi
+                    else {
                         statusHtml = '<span>-</span>';
                     }
 
