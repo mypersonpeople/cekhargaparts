@@ -72,7 +72,6 @@
 </div>
 
 <script>
-// Mengaktifkan/menonaktifkan input persen berdasarkan status checkbox
 function toggleMarginInput() {
     const checkbox = document.getElementById('useMargin');
     const input = document.getElementById('marginPercent');
@@ -87,17 +86,15 @@ function toggleMarginInput() {
     }
 }
 
-// Format Rupiah untuk angka keuangan
 function formatRupiah(angka) {
     return new Intl.NumberFormat('id-ID').format(Math.ceil(angka));
 }
 
-// Fungsi Fetch Data menggunakan alternatif CORS Proxy yang lebih stabil (corsproxy.io)
 async function fetchPartData(kd_part) {
     const cleanCode = kd_part.toUpperCase().trim();
     const targetUrl = `https://h3.indako.id/site/cekhargapartindex?TblmstpartSearch%5Bvidpart%5D=${encodeURIComponent(cleanCode)}&TblmstpartSearch%5Bvpartdesc%5D=&TblmstpartSearch%5Bmhetpart%5D=&TblmstpartSearch%5Bvstatus%5D=`;
     
-    // Menggunakan corsproxy.io (Lebih lancar daripada AllOrigins)
+    // Menggunakan corsproxy.io
     const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
     const response = await fetch(proxyUrl);
@@ -129,11 +126,9 @@ async function startBulkSearch() {
     const resultBody = document.getElementById('resultBody');
     const statusInfo = document.getElementById('statusInfo');
     
-    // Logika penentuan margin berdasarkan checkbox
     const isMarginChecked = document.getElementById('useMargin').checked;
     const marginPercent = isMarginChecked ? (parseFloat(document.getElementById('marginPercent').value) || 0) : 0;
     
-    // Perbarui teks header kolom tabel sesuai persen aktif
     document.getElementById('headerHargaJual').innerText = `Harga Jual (+${marginPercent}%)`;
     
     const codes = input.split('\n').map(c => c.trim()).filter(c => c.length > 0);
@@ -155,17 +150,24 @@ async function startBulkSearch() {
                 tempTable.innerHTML = rawHtml;
                 const cols = tempTable.querySelectorAll('td');
 
-                if (cols.length >= 4) {
+                if (cols.length >= 5) { // Memastikan kolom status (kolom ke-5) tersedia
                     const hargaTeks = cols[3].innerText.trim();
                     const hargaDasar = parseFloat(hargaTeks.replace(/\./g, '').replace(',', '.'));
-                    
-                    // Hitung harga jual final (jika checkbox mati, marginPercent = 0 sehingga pengali = 1)
                     const hargaJual = hargaDasar * (1 + (marginPercent / 100));
 
+                    // PERBAIKAN UTAMA: Mengecek status langsung dari isi teks/HTML kolom ke-5 (index 4)
+                    const statusColumnHtml = cols[4].innerHTML;
+                    const statusColumnText = cols[4].innerText.trim().toUpperCase();
+                    
                     let statusHtml = "";
-                    if (rawHtml.includes('fa-check') || rawHtml.includes('color:green') || rawHtml.includes('aktif') || rawHtml.includes('Aktif')) {
-                        statusHtml = '<span class="status-aktif">Aktif</span>';
-                    } else if (rawHtml.includes('fa-times') || rawHtml.includes('color:red') || rawHtml.includes('tidak')) {
+                    if (statusColumnHtml.includes('fa-check') || statusColumnHtml.includes('color:green') || statusColumnText.includes('AKTIF')) {
+                        // Jika kolom ke-5 punya ikon centang atau teks aktif, namun pastikan bukan "TIDAK AKTIF"
+                        if (statusColumnText.includes('TIDAK')) {
+                            statusHtml = '<span class="status-tidak">Tidak Aktif</span>';
+                        } else {
+                            statusHtml = '<span class="status-aktif">Aktif</span>';
+                        }
+                    } else if (statusColumnHtml.includes('fa-times') || statusColumnHtml.includes('color:red') || statusColumnText.includes('TIDAK')) {
                         statusHtml = '<span class="status-tidak">Tidak Aktif</span>';
                     } else {
                         statusHtml = '<span>-</span>';
@@ -190,7 +192,6 @@ async function startBulkSearch() {
         }
         
         count++;
-        // Jeda waktu 500ms agar server proxy tidak memblokir IP browser Anda akibat request terlalu cepat
         await new Promise(r => setTimeout(r, 500));
     }
     statusInfo.innerHTML = "<strong>Selesai.</strong>";
