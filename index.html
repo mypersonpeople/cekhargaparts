@@ -150,7 +150,8 @@ async function startBulkSearch() {
                 tempTable.innerHTML = rawHtml;
                 const cols = tempTable.querySelectorAll('td');
 
-                if (cols.length >= 4) {
+                // Validasi kolom berdasarkan data Indako asli (Minimal harus ada 5 kolom)
+                if (cols.length >= 5) {
                     const kodePartText = cols[1].innerText.trim();
                     const namaPartText = cols[2].innerText.trim();
                     const hargaTeks = cols[3].innerText.trim();
@@ -158,39 +159,29 @@ async function startBulkSearch() {
                     const hargaDasar = parseFloat(hargaTeks.replace(/\./g, '').replace(',', '.'));
                     const hargaJual = hargaDasar * (1 + (marginPercent / 100));
 
-                    // --- LOGIKA PENCOCOKAN STATUS DAN SIMBOL ---
-                    const statusCell = cols[0];
+                    // --- PENURUNAN LOGIKA STATUS BERDASARKAN COLS[4] ---
+                    const statusCell = cols[4]; 
                     const statusHtmlRaw = statusCell.innerHTML.toLowerCase();
-                    const statusTextRaw = statusCell.innerText.trim().toUpperCase();
+                    
+                    // Ambil isi atribut title (jika ada) contoh: "Tidak Aktif"
+                    const spanEl = statusCell.querySelector('span');
+                    const titleText = spanEl ? (spanEl.getAttribute('title') || '').toUpperCase() : '';
                     
                     let statusHtml = "";
                     
-                    // Jika terdeteksi Tidak Aktif (Ada tanda silang/danger/teks TIDAK/NON)
+                    // Cek indikasi "Tidak Aktif" dari class ikon atau teks title
                     if (
-                        statusHtmlRaw.includes('glyphicon-remove') || 
                         statusHtmlRaw.includes('fa-times') || 
+                        statusHtmlRaw.includes('glyphicon-remove') || 
                         statusHtmlRaw.includes('text-danger') || 
-                        statusHtmlRaw.includes('danger') || 
-                        statusTextRaw.includes('TIDAK') ||
-                        statusTextRaw.includes('NON')
+                        titleText.includes('TIDAK') ||
+                        titleText.includes('NON')
                     ) {
                         statusHtml = '<span class="status-tidak">✗ Tidak Aktif</span>';
                     } 
-                    // Jika terdeteksi Aktif (Ada tanda centang/success/teks AKTIF/atau bawaan kosong kosong di Yii)
-                    else if (
-                        statusHtmlRaw.includes('glyphicon-ok') || 
-                        statusHtmlRaw.includes('fa-check') || 
-                        statusHtmlRaw.includes('text-success') || 
-                        statusHtmlRaw.includes('success') || 
-                        statusHtmlRaw.includes('checked') || 
-                        statusTextRaw.includes('AKTIF') || 
-                        statusTextRaw === '' 
-                    ) {
-                        statusHtml = '<span class="status-aktif">✓ Aktif</span>';
-                    } 
-                    // Cadangan jika format tidak terbaca tapi lolos
+                    // Cek indikasi "Aktif"
                     else {
-                        statusHtml = `<span class="status-aktif">✓ ${statusCell.innerText || 'Aktif'}</span>`;
+                        statusHtml = '<span class="status-aktif">✓ Aktif</span>';
                     }
 
                     resultBody.innerHTML += `
