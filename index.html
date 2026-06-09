@@ -29,7 +29,7 @@
         td { border-bottom: 1px solid #ddd; padding: 12px; font-size: 14px; }
         tr:nth-child(even) { background-color: #fafafa; }
         
-        /* Style Status Custom dengan Simbol */
+        /* Style Status Custom dengan Simbol Teks */
         .status-aktif { color: #2e7d32; font-weight: bold; background: #e8f5e9; padding: 4px 10px; border-radius: 4px; display: inline-block; }
         .status-tidak { color: #d32f2f; font-weight: bold; background: #ffebee; padding: 4px 10px; border-radius: 4px; display: inline-block; }
         .harga-jual { background: #e8f5e9; font-weight: bold; color: #1b5e20; }
@@ -108,13 +108,26 @@ async function fetchPartData(kd_part) {
 
     const parser = new DOMParser();
     const doc = parser.parseFromString(rawHtml, 'text/html');
-    const rows = doc.querySelectorAll('table tbody tr');
+    
+    // Ambil baris data murni dari tbody utama
+    const rows = doc.querySelectorAll('#gridview-index table tbody tr');
     let foundRowHtml = null;
 
     for (const row of rows) {
-        if (row.textContent.toUpperCase().includes(cleanCode)) {
-            foundRowHtml = row.innerHTML;
-            break;
+        // JIKA BARIS ADALAH FILTERS INPUT (YII FRAMEWORK), LANGSUNG LOMPATI (SKIP)
+        if (row.classList.contains('filters') || row.id.includes('filters')) {
+            continue;
+        }
+
+        const cols = row.querySelectorAll('td');
+        if (cols.length >= 5) {
+            const textKodePart = cols[1].innerText.toUpperCase().trim();
+            
+            // COCOKKAN KODE PART SECARA MUTLAK (Bukan sekadar asalkan ada teksnya)
+            if (textKodePart === cleanCode) {
+                foundRowHtml = row.innerHTML;
+                break;
+            }
         }
     }
 
@@ -150,7 +163,6 @@ async function startBulkSearch() {
                 tempTable.innerHTML = rawHtml;
                 const cols = tempTable.querySelectorAll('td');
 
-                // Validasi kolom berdasarkan data Indako asli (Minimal harus ada 5 kolom)
                 if (cols.length >= 5) {
                     const kodePartText = cols[1].innerText.trim();
                     const namaPartText = cols[2].innerText.trim();
@@ -159,17 +171,17 @@ async function startBulkSearch() {
                     const hargaDasar = parseFloat(hargaTeks.replace(/\./g, '').replace(',', '.'));
                     const hargaJual = hargaDasar * (1 + (marginPercent / 100));
 
-                    // --- PENURUNAN LOGIKA STATUS BERDASARKAN COLS[4] ---
-                    const statusCell = cols[4]; 
+                    // --- DETEKSI STATUS DI COLS[4] ---
+                    const statusCell = cols[4];
                     const statusHtmlRaw = statusCell.innerHTML.toLowerCase();
                     
-                    // Ambil isi atribut title (jika ada) contoh: "Tidak Aktif"
+                    // Deteksi teks dari atribut 'title' di tag span (title="Tidak Aktif")
                     const spanEl = statusCell.querySelector('span');
                     const titleText = spanEl ? (spanEl.getAttribute('title') || '').toUpperCase() : '';
                     
                     let statusHtml = "";
                     
-                    // Cek indikasi "Tidak Aktif" dari class ikon atau teks title
+                    // Jika terdeteksi indikasi tidak aktif (fa-times, silang, merah, atau title mengandung kata TIDAK)
                     if (
                         statusHtmlRaw.includes('fa-times') || 
                         statusHtmlRaw.includes('glyphicon-remove') || 
@@ -179,7 +191,7 @@ async function startBulkSearch() {
                     ) {
                         statusHtml = '<span class="status-tidak">✗ Tidak Aktif</span>';
                     } 
-                    // Cek indikasi "Aktif"
+                    // Selain dari itu diidentifikasi sebagai Aktif (fa-check, ok, success, dll)
                     else {
                         statusHtml = '<span class="status-aktif">✓ Aktif</span>';
                     }
@@ -203,6 +215,7 @@ async function startBulkSearch() {
         }
         
         count++;
+        // Jeda anti-banned 0.5 detik
         await new Promise(r => setTimeout(r, 500)); 
     }
     statusInfo.innerHTML = "<strong>Selesai.</strong>";
