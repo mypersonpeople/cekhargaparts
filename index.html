@@ -10,9 +10,14 @@
         h2 { color: #d32f2f; margin-top: 0; }
         textarea { width: 100%; height: 100px; padding: 12px; border-radius: 6px; border: 1px solid #ccc; font-family: monospace; box-sizing: border-box; }
         
-        .input-group { margin-top: 15px; display: flex; align-items: center; gap: 10px; }
+        .control-group { margin-top: 15px; display: flex; flex-direction: column; gap: 10px; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0; }
+        .checkbox-label { display: flex; align-items: center; gap: 8px; font-weight: bold; cursor: pointer; user-select: none; }
+        .checkbox-label input { width: 18px; height: 18px; cursor: pointer; }
+        
+        .input-group { display: flex; align-items: center; gap: 10px; margin-left: 26px; transition: opacity 0.3s; }
         .input-group label { font-weight: bold; color: #444; }
         .input-group input { width: 80px; padding: 8px; border: 1px solid #ccc; border-radius: 5px; font-weight: bold; text-align: center; }
+        .input-group input:disabled { background: #e9ecef; color: #6c757d; cursor: not-allowed; }
         
         .btn-container { margin: 15px 0; display: flex; gap: 10px; }
         button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
@@ -32,12 +37,18 @@
 <body>
 
 <div class="container">
-    <h2>Multi-Check Part Honda & Status (Client-Side)</h2>
+    <h2>Multi-Check Part Honda & Status</h2>
     <textarea id="multiCodes" placeholder="Masukkan Kode Part (Satu per baris)..."></textarea>
     
-    <div class="input-group">
-        <label for="marginPercent">Margin Jual Akhir:</label>
-        <input type="number" id="marginPercent" value="45" min="0" max="500"> <span>%</span>
+    <div class="control-group">
+        <label class="checkbox-label">
+            <input type="checkbox" id="useMargin" onchange="toggleMarginInput()"> Gunakan Margin Harga Jual
+        </label>
+        
+        <div class="input-group" id="marginWrapper" style="opacity: 0.5;">
+            <label for="marginPercent">Persen Margin:</label>
+            <input type="number" id="marginPercent" value="45" min="0" max="500" disabled> <span>%</span>
+        </div>
     </div>
 
     <div class="btn-container">
@@ -53,7 +64,7 @@
                 <th>Nama Part</th>
                 <th>Harga HET (Polos)</th>
                 <th>Status</th>
-                <th id="headerHargaJual">Harga Jual (+45%)</th>
+                <th id="headerHargaJual">Harga Jual (+0%)</th>
             </tr>
         </thead>
         <tbody id="resultBody"></tbody>
@@ -61,35 +72,45 @@
 </div>
 
 <script>
-// Format Rupiah untuk mempermudah pembacaan nominal uang
+// Mengaktifkan/menonaktifkan input persen berdasarkan status checkbox
+function toggleMarginInput() {
+    const checkbox = document.getElementById('useMargin');
+    const input = document.getElementById('marginPercent');
+    const wrapper = document.getElementById('marginWrapper');
+    
+    if (checkbox.checked) {
+        input.disabled = false;
+        wrapper.style.opacity = "1";
+    } else {
+        input.disabled = true;
+        wrapper.style.opacity = "0.5";
+    }
+}
+
+// Format Rupiah untuk angka keuangan
 function formatRupiah(angka) {
     return new Intl.NumberFormat('id-ID').format(Math.ceil(angka));
 }
 
-// FUNGSI UTAMA RECODE BACKEND PHP KE JAVASCRIPT (Menggunakan Proxy AllOrigins)
+// Fungsi Fetch Data menggunakan alternatif CORS Proxy yang lebih stabil (corsproxy.io)
 async function fetchPartData(kd_part) {
     const cleanCode = kd_part.toUpperCase().trim();
     const targetUrl = `https://h3.indako.id/site/cekhargapartindex?TblmstpartSearch%5Bvidpart%5D=${encodeURIComponent(cleanCode)}&TblmstpartSearch%5Bvpartdesc%5D=&TblmstpartSearch%5Bmhetpart%5D=&TblmstpartSearch%5Bvstatus%5D=`;
     
-    // Bypass CORS menggunakan AllOrigins proxy agar bisa jalan di GitHub Pages
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+    // Menggunakan corsproxy.io (Lebih lancar daripada AllOrigins)
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
     const response = await fetch(proxyUrl);
-    if (!response.ok) throw new Error("Network error");
+    if (!response.ok) throw new Error("Gagal mengambil data dari proxy");
     
-    const json = await response.json();
-    const rawHtml = json.contents; // Mengambil data HTML mentah dari web target
+    const rawHtml = await response.text();
 
-    // Validasi data kosong
     if (!rawHtml || rawHtml.includes('No results found') || rawHtml.includes('Tidak ada data')) {
         return "NOT_FOUND";
     }
 
-    // Pembuatan DOM Virtual untuk memparsing HTML secara aman (Menggantikan Regex PHP)
     const parser = new DOMParser();
     const doc = parser.parseFromString(rawHtml, 'text/html');
-    
-    // Mencari baris TR yang mengandung kode part di dalamnya
     const rows = doc.querySelectorAll('table tbody tr');
     let foundRowHtml = null;
 
@@ -108,8 +129,11 @@ async function startBulkSearch() {
     const resultBody = document.getElementById('resultBody');
     const statusInfo = document.getElementById('statusInfo');
     
-    // Mengambil nilai margin dinamis dari input user
-    const marginPercent = parseFloat(document.getElementById('marginPercent').value) || 0;
+    // Logika penentuan margin berdasarkan checkbox
+    const isMarginChecked = document.getElementById('useMargin').checked;
+    const marginPercent = isMarginChecked ? (parseFloat(document.getElementById('marginPercent').value) || 0) : 0;
+    
+    // Perbarui teks header kolom tabel sesuai persen aktif
     document.getElementById('headerHargaJual').innerText = `Harga Jual (+${marginPercent}%)`;
     
     const codes = input.split('\n').map(c => c.trim()).filter(c => c.length > 0);
@@ -122,7 +146,6 @@ async function startBulkSearch() {
         statusInfo.innerHTML = `Memproses: <strong>${code}</strong>...`;
         
         try {
-            // Memanggil fungsi pengganti PHP cURL
             const rawHtml = await fetchPartData(code);
             
             if (rawHtml === "NOT_FOUND") {
@@ -134,14 +157,11 @@ async function startBulkSearch() {
 
                 if (cols.length >= 4) {
                     const hargaTeks = cols[3].innerText.trim();
-                    
-                    // Menghilangkan titik ribuan agar angka dapat dikalkulasi secara matematis
                     const hargaDasar = parseFloat(hargaTeks.replace(/\./g, '').replace(',', '.'));
                     
-                    // Kalkulasi Harga Jual berdasarkan persentase dinamis input
+                    // Hitung harga jual final (jika checkbox mati, marginPercent = 0 sehingga pengali = 1)
                     const hargaJual = hargaDasar * (1 + (marginPercent / 100));
 
-                    // Deteksi Status Aktif/Tidak Aktif dari ikon/style HTML target
                     let statusHtml = "";
                     if (rawHtml.includes('fa-check') || rawHtml.includes('color:green') || rawHtml.includes('aktif') || rawHtml.includes('Aktif')) {
                         statusHtml = '<span class="status-aktif">Aktif</span>';
@@ -166,12 +186,12 @@ async function startBulkSearch() {
             }
         } catch (error) {
             console.error(error);
-            resultBody.innerHTML += `<tr><td>${count}</td><td>${code}</td><td colspan="4" style="color:red">Error Koneksi / Proxy Lambat</td></tr>`;
+            resultBody.innerHTML += `<tr><td>${count}</td><td>${code}</td><td colspan="4" style="color:red; font-weight:bold;">Error Jaringan / Server Padat</td></tr>`;
         }
         
         count++;
-        // Delay 300ms untuk mencegah spam request beruntun ke server proxy
-        await new Promise(r => setTimeout(r, 300));
+        // Jeda waktu 500ms agar server proxy tidak memblokir IP browser Anda akibat request terlalu cepat
+        await new Promise(r => setTimeout(r, 500));
     }
     statusInfo.innerHTML = "<strong>Selesai.</strong>";
 }
