@@ -2,18 +2,28 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Cek Harga Honda Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cek Harga Honda Pro - GitHub Pages</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; padding: 20px; }
         .container { max-width: 1100px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         h2 { color: #d32f2f; margin-top: 0; }
-        textarea { width: 100%; height: 100px; padding: 12px; border-radius: 6px; border: 1px solid #ccc; font-family: monospace; }
+        textarea { width: 100%; height: 100px; padding: 12px; border-radius: 6px; border: 1px solid #ccc; font-family: monospace; box-sizing: border-box; }
+        
+        .input-group { margin-top: 15px; display: flex; align-items: center; gap: 10px; }
+        .input-group label { font-weight: bold; color: #444; }
+        .input-group input { width: 80px; padding: 8px; border: 1px solid #ccc; border-radius: 5px; font-weight: bold; text-align: center; }
+        
         .btn-container { margin: 15px 0; display: flex; gap: 10px; }
         button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
         .btn-search { background: #d32f2f; color: white; }
+        .btn-search:hover { background: #b71c1c; }
+        
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th { background: #d32f2f; color: white; padding: 12px; text-align: left; font-size: 14px; }
         td { border-bottom: 1px solid #ddd; padding: 12px; font-size: 14px; }
+        tr:nth-child(even) { background-color: #fafafa; }
+        
         .status-aktif { color: #2e7d32; font-weight: bold; }
         .status-tidak { color: #d32f2f; font-weight: bold; }
         .harga-jual { background: #e8f5e9; font-weight: bold; color: #1b5e20; }
@@ -22,8 +32,14 @@
 <body>
 
 <div class="container">
-    <h2>Multi-Check Part Honda & Status</h2>
+    <h2>Multi-Check Part Honda & Status (Client-Side)</h2>
     <textarea id="multiCodes" placeholder="Masukkan Kode Part (Satu per baris)..."></textarea>
+    
+    <div class="input-group">
+        <label for="marginPercent">Margin Jual Akhir:</label>
+        <input type="number" id="marginPercent" value="45" min="0" max="500"> <span>%</span>
+    </div>
+
     <div class="btn-container">
         <button class="btn-search" onclick="startBulkSearch()">Cari & Hitung</button>
     </div>
@@ -37,7 +53,7 @@
                 <th>Nama Part</th>
                 <th>Harga HET (Polos)</th>
                 <th>Status</th>
-                <th>Harga Jual (+45%)</th>
+                <th id="headerHargaJual">Harga Jual (+45%)</th>
             </tr>
         </thead>
         <tbody id="resultBody"></tbody>
@@ -45,15 +61,56 @@
 </div>
 
 <script>
-// Fungsi untuk memformat Harga Jual tetap pakai titik agar mudah dibaca di akhir
+// Format Rupiah untuk mempermudah pembacaan nominal uang
 function formatRupiah(angka) {
     return new Intl.NumberFormat('id-ID').format(Math.ceil(angka));
+}
+
+// FUNGSI UTAMA RECODE BACKEND PHP KE JAVASCRIPT (Menggunakan Proxy AllOrigins)
+async function fetchPartData(kd_part) {
+    const cleanCode = kd_part.toUpperCase().trim();
+    const targetUrl = `https://h3.indako.id/site/cekhargapartindex?TblmstpartSearch%5Bvidpart%5D=${encodeURIComponent(cleanCode)}&TblmstpartSearch%5Bvpartdesc%5D=&TblmstpartSearch%5Bmhetpart%5D=&TblmstpartSearch%5Bvstatus%5D=`;
+    
+    // Bypass CORS menggunakan AllOrigins proxy agar bisa jalan di GitHub Pages
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+
+    const response = await fetch(proxyUrl);
+    if (!response.ok) throw new Error("Network error");
+    
+    const json = await response.json();
+    const rawHtml = json.contents; // Mengambil data HTML mentah dari web target
+
+    // Validasi data kosong
+    if (!rawHtml || rawHtml.includes('No results found') || rawHtml.includes('Tidak ada data')) {
+        return "NOT_FOUND";
+    }
+
+    // Pembuatan DOM Virtual untuk memparsing HTML secara aman (Menggantikan Regex PHP)
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(rawHtml, 'text/html');
+    
+    // Mencari baris TR yang mengandung kode part di dalamnya
+    const rows = doc.querySelectorAll('table tbody tr');
+    let foundRowHtml = null;
+
+    for (const row of rows) {
+        if (row.textContent.toUpperCase().includes(cleanCode)) {
+            foundRowHtml = row.innerHTML;
+            break;
+        }
+    }
+
+    return foundRowHtml ? foundRowHtml : "NOT_FOUND";
 }
 
 async function startBulkSearch() {
     const input = document.getElementById('multiCodes').value;
     const resultBody = document.getElementById('resultBody');
     const statusInfo = document.getElementById('statusInfo');
+    
+    // Mengambil nilai margin dinamis dari input user
+    const marginPercent = parseFloat(document.getElementById('marginPercent').value) || 0;
+    document.getElementById('headerHargaJual').innerText = `Harga Jual (+${marginPercent}%)`;
     
     const codes = input.split('\n').map(c => c.trim()).filter(c => c.length > 0);
     if (codes.length === 0) return alert("Isi kode part!");
@@ -62,29 +119,33 @@ async function startBulkSearch() {
     let count = 1;
 
     for (const code of codes) {
-        statusInfo.innerHTML = `Memproses: ${code}...`;
+        statusInfo.innerHTML = `Memproses: <strong>${code}</strong>...`;
         
         try {
-            const response = await fetch(`get.php?kd_part=${encodeURIComponent(code)}`);
-            const rawHtml = await response.text();
+            // Memanggil fungsi pengganti PHP cURL
+            const rawHtml = await fetchPartData(code);
             
             if (rawHtml === "NOT_FOUND") {
-                resultBody.innerHTML += `<tr><td>${count}</td><td>${code}</td><td colspan="4" style="color:orange">Tidak Ditemukan</td></tr>`;
+                resultBody.innerHTML += `<tr><td>${count}</td><td>${code}</td><td colspan="4" style="color:orange; font-weight:bold;">Tidak Ditemukan</td></tr>`;
             } else {
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = `<table>${rawHtml}</table>`;
-                const cols = tempDiv.querySelectorAll('td');
+                const tempTable = document.createElement('tr');
+                tempTable.innerHTML = rawHtml;
+                const cols = tempTable.querySelectorAll('td');
 
                 if (cols.length >= 4) {
                     const hargaTeks = cols[3].innerText.trim();
-                    // Menghapus titik untuk kalkulasi
+                    
+                    // Menghilangkan titik ribuan agar angka dapat dikalkulasi secara matematis
                     const hargaDasar = parseFloat(hargaTeks.replace(/\./g, '').replace(',', '.'));
-                    const hargaJual = hargaDasar * 1.45;
+                    
+                    // Kalkulasi Harga Jual berdasarkan persentase dinamis input
+                    const hargaJual = hargaDasar * (1 + (marginPercent / 100));
 
+                    // Deteksi Status Aktif/Tidak Aktif dari ikon/style HTML target
                     let statusHtml = "";
-                    if (rawHtml.includes('fa-check') || rawHtml.includes('color:green')) {
+                    if (rawHtml.includes('fa-check') || rawHtml.includes('color:green') || rawHtml.includes('aktif') || rawHtml.includes('Aktif')) {
                         statusHtml = '<span class="status-aktif">Aktif</span>';
-                    } else if (rawHtml.includes('fa-times') || rawHtml.includes('color:red')) {
+                    } else if (rawHtml.includes('fa-times') || rawHtml.includes('color:red') || rawHtml.includes('tidak')) {
                         statusHtml = '<span class="status-tidak">Tidak Aktif</span>';
                     } else {
                         statusHtml = '<span>-</span>';
@@ -95,19 +156,24 @@ async function startBulkSearch() {
                             <td>${count}</td>
                             <td>${cols[1].innerText}</td>
                             <td>${cols[2].innerText}</td>
-                            <td>${hargaDasar}</td> 
+                            <td>Rp ${formatRupiah(hargaDasar)}</td> 
                             <td>${statusHtml}</td>
                             <td class="harga-jual">Rp ${formatRupiah(hargaJual)}</td>
                         </tr>`;
+                } else {
+                    resultBody.innerHTML += `<tr><td>${count}</td><td>${code}</td><td colspan="4" style="color:orange">Format Baris Tidak Sesuai</td></tr>`;
                 }
             }
         } catch (error) {
-            resultBody.innerHTML += `<tr><td>${count}</td><td>${code}</td><td colspan="4">Error Koneksi</td></tr>`;
+            console.error(error);
+            resultBody.innerHTML += `<tr><td>${count}</td><td>${code}</td><td colspan="4" style="color:red">Error Koneksi / Proxy Lambat</td></tr>`;
         }
+        
         count++;
-        await new Promise(r => setTimeout(r, 250));
+        // Delay 300ms untuk mencegah spam request beruntun ke server proxy
+        await new Promise(r => setTimeout(r, 300));
     }
-    statusInfo.innerHTML = "Selesai.";
+    statusInfo.innerHTML = "<strong>Selesai.</strong>";
 }
 </script>
 </body>
