@@ -29,8 +29,9 @@
         td { border-bottom: 1px solid #ddd; padding: 12px; font-size: 14px; }
         tr:nth-child(even) { background-color: #fafafa; }
         
-        .status-aktif { color: #2e7d32; font-weight: bold; background: #e8f5e9; padding: 3px 8px; border-radius: 4px; display: inline-block; }
-        .status-tidak { color: #d32f2f; font-weight: bold; background: #ffebee; padding: 3px 8px; border-radius: 4px; display: inline-block; }
+        /* Style Status Custom dengan Simbol */
+        .status-aktif { color: #2e7d32; font-weight: bold; background: #e8f5e9; padding: 4px 10px; border-radius: 4px; display: inline-block; }
+        .status-tidak { color: #d32f2f; font-weight: bold; background: #ffebee; padding: 4px 10px; border-radius: 4px; display: inline-block; }
         .harga-jual { background: #e8f5e9; font-weight: bold; color: #1b5e20; }
     </style>
 </head>
@@ -149,7 +150,6 @@ async function startBulkSearch() {
                 tempTable.innerHTML = rawHtml;
                 const cols = tempTable.querySelectorAll('td');
 
-                // Validasi jumlah kolom respon web Indako
                 if (cols.length >= 4) {
                     const kodePartText = cols[1].innerText.trim();
                     const namaPartText = cols[2].innerText.trim();
@@ -158,14 +158,14 @@ async function startBulkSearch() {
                     const hargaDasar = parseFloat(hargaTeks.replace(/\./g, '').replace(',', '.'));
                     const hargaJual = hargaDasar * (1 + (marginPercent / 100));
 
-                    // --- DETEKSI STATUS ---
+                    // --- LOGIKA PENCOCOKAN STATUS DAN SIMBOL ---
                     const statusCell = cols[0];
                     const statusHtmlRaw = statusCell.innerHTML.toLowerCase();
                     const statusTextRaw = statusCell.innerText.trim().toUpperCase();
                     
                     let statusHtml = "";
                     
-                    // Cek indikasi Tidak Aktif (silang, remove, danger, atau teks TIDAK)
+                    // Jika terdeteksi Tidak Aktif (Ada tanda silang/danger/teks TIDAK/NON)
                     if (
                         statusHtmlRaw.includes('glyphicon-remove') || 
                         statusHtmlRaw.includes('fa-times') || 
@@ -174,9 +174,9 @@ async function startBulkSearch() {
                         statusTextRaw.includes('TIDAK') ||
                         statusTextRaw.includes('NON')
                     ) {
-                        statusHtml = '<span class="status-tidak">Tidak Aktif</span>';
+                        statusHtml = '<span class="status-tidak">✗ Tidak Aktif</span>';
                     } 
-                    // Cek indikasi Aktif (centang, ok, check, success, atau teks AKTIF)
+                    // Jika terdeteksi Aktif (Ada tanda centang/success/teks AKTIF/atau bawaan kosong kosong di Yii)
                     else if (
                         statusHtmlRaw.includes('glyphicon-ok') || 
                         statusHtmlRaw.includes('fa-check') || 
@@ -184,13 +184,13 @@ async function startBulkSearch() {
                         statusHtmlRaw.includes('success') || 
                         statusHtmlRaw.includes('checked') || 
                         statusTextRaw.includes('AKTIF') || 
-                        statusTextRaw === '' // Default Yii Framework jika hanya ikon tanpa teks baku
+                        statusTextRaw === '' 
                     ) {
-                        statusHtml = '<span class="status-aktif">Aktif</span>';
+                        statusHtml = '<span class="status-aktif">✓ Aktif</span>';
                     } 
-                    // Backup / Fallback (Jika indikator tak dikenal tapi element tidak kosong)
+                    // Cadangan jika format tidak terbaca tapi lolos
                     else {
-                        statusHtml = `<span class="status-aktif">${statusCell.innerHTML}</span>`;
+                        statusHtml = `<span class="status-aktif">✓ ${statusCell.innerText || 'Aktif'}</span>`;
                     }
 
                     resultBody.innerHTML += `
@@ -212,7 +212,7 @@ async function startBulkSearch() {
         }
         
         count++;
-        await new Promise(r => setTimeout(r, 500)); // jeda 0.5 detik per hit anti-blokir
+        await new Promise(r => setTimeout(r, 500)); 
     }
     statusInfo.innerHTML = "<strong>Selesai.</strong>";
 }
