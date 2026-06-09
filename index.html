@@ -149,26 +149,37 @@ async function startBulkSearch() {
                 tempTable.innerHTML = rawHtml;
                 const cols = tempTable.querySelectorAll('td');
 
-                if (cols.length >= 5) {
-                    const hargaTeks = cols[3].innerText.trim();
+                // Deteksi indeks secara dinamis berdasarkan posisi kolom berisi teks "Rp" atau angka harga
+                let kodeIndex = 1;
+                let namaIndex = 2;
+                let hargaIndex = 3;
+
+                // Jika kolomnya bergeser (hanya ada 4 kolom), sesuaikan urutan indeksnya
+                if (cols.length === 4) {
+                    kodeIndex = 0;
+                    namaIndex = 1;
+                    hargaIndex = 2;
+                }
+
+                if (cols.length >= 4) {
+                    const hargaTeks = cols[hargaIndex].innerText.trim();
                     const hargaDasar = parseFloat(hargaTeks.replace(/\./g, '').replace(',', '.'));
                     const hargaJual = hargaDasar * (1 + (marginPercent / 100));
 
-                    // AMBIL KONTEN KOLOM KE-5 (INDEX 4) SECARA KHUSUS
-                    const statusColumnHtml = cols[4].innerHTML;
-                    const statusColumnText = cols[4].innerText.trim().toUpperCase();
-                    
+                    // PEMBARUAN LOGIKA: Deteksi menyeluruh di dalam seluruh baris TR murni
                     let statusHtml = "";
+                    const fullRowText = tempTable.innerText.toUpperCase();
+                    const fullRowHtml = tempTable.innerHTML;
                     
-                    // LOGIKA BARU: Cek tanda silang merah (remove/text-danger) atau kata "TIDAK" terlebih dahulu
-                    if (statusColumnHtml.includes('glyphicon-remove') || statusColumnHtml.includes('text-danger') || statusColumnText.includes('TIDAK')) {
+                    // 1. Cek tanda silang merah / status Tidak Aktif terlebih dahulu
+                    if (fullRowHtml.includes('glyphicon-remove') || fullRowHtml.includes('text-danger') || fullRowText.includes('TIDAK AKTIF')) {
                         statusHtml = '<span class="status-tidak">Tidak Aktif</span>';
                     } 
-                    // Cek tanda centang hijau (ok/text-success) atau kata "AKTIF" murni
-                    else if (statusColumnHtml.includes('glyphicon-ok') || statusColumnHtml.includes('text-success') || statusColumnText === 'AKTIF') {
+                    // 2. Cek tanda centang hijau / status Aktif
+                    else if (fullRowHtml.includes('glyphicon-ok') || fullRowHtml.includes('text-success') || fullRowText.includes('AKTIF')) {
                         statusHtml = '<span class="status-aktif">Aktif</span>';
                     } 
-                    // Fallback jika kosong atau tidak terdefinisi
+                    // 3. Cadangan jika tidak terdeteksi sama sekali
                     else {
                         statusHtml = '<span>-</span>';
                     }
@@ -176,8 +187,8 @@ async function startBulkSearch() {
                     resultBody.innerHTML += `
                         <tr>
                             <td>${count}</td>
-                            <td>${cols[1].innerText}</td>
-                            <td>${cols[2].innerText}</td>
+                            <td>${cols[kodeIndex].innerText}</td>
+                            <td>${cols[namaIndex].innerText}</td>
                             <td>Rp ${formatRupiah(hargaDasar)}</td> 
                             <td>${statusHtml}</td>
                             <td class="harga-jual">Rp ${formatRupiah(hargaJual)}</td>
