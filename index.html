@@ -29,8 +29,8 @@
         td { border-bottom: 1px solid #ddd; padding: 12px; font-size: 14px; }
         tr:nth-child(even) { background-color: #fafafa; }
         
-        .status-aktif { color: #2e7d32; font-weight: bold; }
-        .status-tidak { color: #d32f2f; font-weight: bold; }
+        .status-aktif { background: #e8f5e9; color: #2e7d32; font-weight: bold; padding: 4px 8px; border-radius: 4px; }
+        .status-tidak { background: #ffebee; color: #d32f2f; font-weight: bold; padding: 4px 8px; border-radius: 4px; }
         .harga-jual { background: #e8f5e9; font-weight: bold; color: #1b5e20; }
     </style>
 </head>
@@ -112,7 +112,8 @@ async function fetchPartData(kd_part) {
 
     for (const row of rows) {
         if (row.textContent.toUpperCase().includes(cleanCode)) {
-            foundRowHtml = row.innerHTML;
+            // Ambil UTUH struktur <tr> termasuk atribut class luar agar tidak ada data CSS status yang hilang
+            foundRowHtml = row.outerHTML;
             break;
         }
     }
@@ -145,20 +146,22 @@ async function startBulkSearch() {
             if (rawHtml === "NOT_FOUND") {
                 resultBody.innerHTML += `<tr><td>${count}</td><td>${code}</td><td colspan="4" style="color:orange; font-weight:bold;">Tidak Ditemukan</td></tr>`;
             } else {
-                const tempTable = document.createElement('tr');
+                // Gunakan wrapper khusus agar pembacaan outerHTML dari fungsi fetch berjalan sempurna
+                const tempTable = document.createElement('tbody');
                 tempTable.innerHTML = rawHtml;
-                const cols = tempTable.querySelectorAll('td');
+                const rowElement = tempTable.querySelector('tr');
+                const cols = rowElement.querySelectorAll('td');
 
-                // Deteksi indeks secara dinamis berdasarkan posisi kolom berisi teks "Rp" atau angka harga
                 let kodeIndex = 1;
                 let namaIndex = 2;
                 let hargaIndex = 3;
+                let statusIndex = 4;
 
-                // Jika kolomnya bergeser (hanya ada 4 kolom), sesuaikan urutan indeksnya
                 if (cols.length === 4) {
                     kodeIndex = 0;
                     namaIndex = 1;
                     hargaIndex = 2;
+                    statusIndex = 3;
                 }
 
                 if (cols.length >= 4) {
@@ -166,22 +169,36 @@ async function startBulkSearch() {
                     const hargaDasar = parseFloat(hargaTeks.replace(/\./g, '').replace(',', '.'));
                     const hargaJual = hargaDasar * (1 + (marginPercent / 100));
 
-                    // PEMBARUAN LOGIKA: Deteksi menyeluruh di dalam seluruh baris TR murni
+                    // STRATEGI BARU: Ambil teks dan HTML dari seluruh baris & kolom status secara spesifik
+                    const fullRowHtml = rowElement.outerHTML.toLowerCase();
+                    const statusCellHtml = cols[statusIndex] ? cols[statusIndex].innerHTML : "";
+                    const statusCellText = cols[statusIndex] ? cols[statusIndex].innerText.trim().toUpperCase() : "";
+
                     let statusHtml = "";
-                    const fullRowText = tempTable.innerText.toUpperCase();
-                    const fullRowHtml = tempTable.innerHTML;
                     
-                    // 1. Cek tanda silang merah / status Tidak Aktif terlebih dahulu
-                    if (fullRowHtml.includes('glyphicon-remove') || fullRowHtml.includes('text-danger') || fullRowText.includes('TIDAK AKTIF')) {
+                    // LAPIS 1: Deteksi indikator "Tidak Aktif" (Teks, Class, atau Ikon Silang)
+                    if (
+                        fullRowHtml.includes('glyphicon-remove') || 
+                        fullRowHtml.includes('text-danger') || 
+                        fullRowHtml.includes('danger') ||
+                        statusCellText.includes('TIDAK') ||
+                        statusCellText === '0'
+                    ) {
                         statusHtml = '<span class="status-tidak">Tidak Aktif</span>';
                     } 
-                    // 2. Cek tanda centang hijau / status Aktif
-                    else if (fullRowHtml.includes('glyphicon-ok') || fullRowHtml.includes('text-success') || fullRowText.includes('AKTIF')) {
+                    // LAPIS 2: Deteksi indikator "Aktif" (Teks, Class, atau Ikon Centang)
+                    else if (
+                        fullRowHtml.includes('glyphicon-ok') || 
+                        fullRowHtml.includes('text-success') || 
+                        fullRowHtml.includes('success') ||
+                        statusCellText.includes('AKTI') ||
+                        statusCellText === '1'
+                    ) {
                         statusHtml = '<span class="status-aktif">Aktif</span>';
                     } 
-                    // 3. Cadangan jika tidak terdeteksi sama sekali
+                    // LAPIS 3 (CATCH-ALL): Jika masih gagal tembus, tampilkan langsung elemen asli dari Indako
                     else {
-                        statusHtml = '<span>-</span>';
+                        statusHtml = cols[statusIndex] ? cols[statusIndex].innerHTML : "<span>-</span>";
                     }
 
                     resultBody.innerHTML += `
