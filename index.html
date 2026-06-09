@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Cek Harga Honda Pro</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; padding: 20px; }
+        .container { max-width: 1100px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h2 { color: #d32f2f; margin-top: 0; }
+        textarea { width: 100%; height: 100px; padding: 12px; border-radius: 6px; border: 1px solid #ccc; font-family: monospace; }
+        .btn-container { margin: 15px 0; display: flex; gap: 10px; }
+        button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .btn-search { background: #d32f2f; color: white; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: #d32f2f; color: white; padding: 12px; text-align: left; font-size: 14px; }
+        td { border-bottom: 1px solid #ddd; padding: 12px; font-size: 14px; }
+        .status-aktif { color: #2e7d32; font-weight: bold; }
+        .status-tidak { color: #d32f2f; font-weight: bold; }
+        .harga-jual { background: #e8f5e9; font-weight: bold; color: #1b5e20; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Multi-Check Part Honda & Status</h2>
+    <textarea id="multiCodes" placeholder="Masukkan Kode Part (Satu per baris)..."></textarea>
+    <div class="btn-container">
+        <button class="btn-search" onclick="startBulkSearch()">Cari & Hitung</button>
+    </div>
+    <div id="statusInfo" style="margin-bottom: 10px; font-style: italic;"></div>
+
+    <table id="resultTable">
+        <thead>
+            <tr>
+                <th>No</th>
+                <th>Kode Part</th>
+                <th>Nama Part</th>
+                <th>Harga HET (Polos)</th>
+                <th>Status</th>
+                <th>Harga Jual (+45%)</th>
+            </tr>
+        </thead>
+        <tbody id="resultBody"></tbody>
+    </table>
+</div>
+
+<script>
+// Fungsi untuk memformat Harga Jual tetap pakai titik agar mudah dibaca di akhir
+function formatRupiah(angka) {
+    return new Intl.NumberFormat('id-ID').format(Math.ceil(angka));
+}
+
+async function startBulkSearch() {
+    const input = document.getElementById('multiCodes').value;
+    const resultBody = document.getElementById('resultBody');
+    const statusInfo = document.getElementById('statusInfo');
+    
+    const codes = input.split('\n').map(c => c.trim()).filter(c => c.length > 0);
+    if (codes.length === 0) return alert("Isi kode part!");
+
+    resultBody.innerHTML = ""; 
+    let count = 1;
+
+    for (const code of codes) {
+        statusInfo.innerHTML = `Memproses: ${code}...`;
+        
+        try {
+            const response = await fetch(`get.php?kd_part=${encodeURIComponent(code)}`);
+            const rawHtml = await response.text();
+            
+            if (rawHtml === "NOT_FOUND") {
+                resultBody.innerHTML += `<tr><td>${count}</td><td>${code}</td><td colspan="4" style="color:orange">Tidak Ditemukan</td></tr>`;
+            } else {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = `<table>${rawHtml}</table>`;
+                const cols = tempDiv.querySelectorAll('td');
+
+                if (cols.length >= 4) {
+                    const hargaTeks = cols[3].innerText.trim();
+                    // Menghapus titik untuk kalkulasi
+                    const hargaDasar = parseFloat(hargaTeks.replace(/\./g, '').replace(',', '.'));
+                    const hargaJual = hargaDasar * 1.45;
+
+                    let statusHtml = "";
+                    if (rawHtml.includes('fa-check') || rawHtml.includes('color:green')) {
+                        statusHtml = '<span class="status-aktif">Aktif</span>';
+                    } else if (rawHtml.includes('fa-times') || rawHtml.includes('color:red')) {
+                        statusHtml = '<span class="status-tidak">Tidak Aktif</span>';
+                    } else {
+                        statusHtml = '<span>-</span>';
+                    }
+
+                    resultBody.innerHTML += `
+                        <tr>
+                            <td>${count}</td>
+                            <td>${cols[1].innerText}</td>
+                            <td>${cols[2].innerText}</td>
+                            <td>${hargaDasar}</td> 
+                            <td>${statusHtml}</td>
+                            <td class="harga-jual">Rp ${formatRupiah(hargaJual)}</td>
+                        </tr>`;
+                }
+            }
+        } catch (error) {
+            resultBody.innerHTML += `<tr><td>${count}</td><td>${code}</td><td colspan="4">Error Koneksi</td></tr>`;
+        }
+        count++;
+        await new Promise(r => setTimeout(r, 250));
+    }
+    statusInfo.innerHTML = "Selesai.";
+}
+</script>
+</body>
+</html>
